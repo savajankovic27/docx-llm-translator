@@ -47,3 +47,6 @@ Customization is handled via two primary lists in the configuration section of t
     * The `[FR]` marker is appended to signal required translation.
 4.  **Inject**: The engine calculates the character ratio of original runs and slices the new text accordingly to maintain bolding/italics.
 5.  **Rebuild**: XML trees are serialized and the directory is re-zipped into a valid Word archive.
+
+**Note**
+Currently, there are no LLM capabilities within the system. However, the plan is to implement these workflows later on in the project lifecycle. 
