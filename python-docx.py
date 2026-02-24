@@ -4,9 +4,23 @@ import tempfile
 from lxml import etree
 import re
 import shutil
+from dotenv import load_dotenv
+from openai import OpenAI
 
-# 1. Configuration & Protected Terms
-# These are official names and acronyms that must remain exactly as-is [cite: 715-747, 860-880].
+# 1. SETUP & CONFIGURATION
+# This loads your key from the .env file you created
+load_dotenv()
+api_key = os.environ.get("OPENAI_API_KEY")
+
+# IMPORTANT: We point the client to the GitHub/Copilot inference endpoint
+# This is why your previous attempt showed an error—the default was api.openai.com
+client = OpenAI(
+    api_key=api_key,
+    base_url="https://models.inference.ai.azure.com" 
+)
+
+# ... [The rest of the PROTECTED_TERMS and pipeline logic follows] ...
+
 PROTECTED_TERMS = [
     "Canada Development Investment Corporation", "CDEV", "CEI", "CEEFC", 
     "CGF", "CGFIM", "CHHC", "CILGC", "CIC", "TMP Finance", "TMC", "IFRS", 
@@ -14,139 +28,129 @@ PROTECTED_TERMS = [
     "Trans Mountain Pipeline", "Government of Canada", "16342451 CANADA INC."
 ]
 
-# Words that make up the logo block on the first page [cite: 638-641].
 PROTECTED_WORDS = {"CANADA", "DEVELOPMENT", "INVESTMENT", "CORPORATION"}
-
 NAMESPACE = {"w": "http://schemas.openxmlformats.org/wordprocessingml/2006/main"}
 EXCLUDED_FILES = {"styles.xml", "settings.xml", "fontTable.xml", "webSettings.xml"}
 
-# 2. Translation & Tagging Logic
+# 2. AI TRANSLATION ENGINE (Targeting GPT-4o via Copilot)
+def call_llm(text):
+    prompt = f"""
+    You are a professional translator for a Canadian government investment corporation.
+    Translate the following English text into professional Canadian French.
+
+    STRICT RULES:
+    1. Any word followed by "[PROT]" is a protected trademark. Keep it EXACTLY as is but REMOVE the "[PROT]" tag.
+    2. Maintain a formal, institutional tone.
+    3. Output ONLY the translated text. No commentary.
+
+    TEXT:
+    {text}
+    """
+    try:
+        response = client.chat.completions.create(
+        model="gpt-4o", # OR try "openai/gpt-4o" if plain "gpt-4o" fails
+        messages=[{"role": "user", "content": prompt}]
+        ) 
+        return response.choices[0].message.content.strip()
+    except Exception as e:
+        print(f"AI Translation Error: {e}")
+        return text + " [TRANSLATION_FAILED]"
+
+# 3. PROCESSING LOGIC
 def translate_chunk(chunk):
     """
-    Identifies protected terms, tags them with [PROT], 
-    and adds the [FR] marker to the paragraph .
+    Handles protection logic and coordinates the LLM translation.
     """
     translated = []
     for pu in chunk:
         text = pu["full_text"]
         text_stripped = text.strip()
 
-        # A. Handle stacked logo word protection (Return original exactly)
-        if text_stripped.upper() in PROTECTED_WORDS:
+        # A. Handle Logo/Signature blocks (No translation)
+        if text_stripped.upper() in PROTECTED_WORDS or any(text_stripped == term for term in PROTECTED_TERMS):
             translated.append(text)
             continue
 
-        # B. Handle Trademark-only lines (e.g., in footers/signatures)
-        # If the whole paragraph is just the company name, don't add [FR]
-        if any(text_stripped == term for term in PROTECTED_TERMS):
-            translated.append(text)
-            continue
-
-        # C. Tag protected terms within mixed paragraphs
+        # B. Tag protected terms within the sentence
         tagged_text = text
         for term in PROTECTED_TERMS:
-            # Captures the word and adds [PROT] while maintaining original casing
             pattern = re.compile(rf"\b({re.escape(term)})\b", re.IGNORECASE)
             tagged_text = pattern.sub(r"\1 [PROT]", tagged_text)
 
-        # D. Append [FR] marker to indicate 'To be translated'
-        final_text = tagged_text + " [FR]"
-        translated.append(final_text)
+        # C. Call the AI for translation
+        french_text = call_llm(tagged_text)
+        translated.append(french_text + " [FR]")
     return translated
 
 def inject_translated_chunk(chunk):
     """
-    Distributes text back into original runs proportionally to preserve styles like bolding .
+    Re-injects text using Proportional Distribution to preserve bold/italics.
     """
     translated_paragraphs = translate_chunk(chunk)
-
     for pu, translated_text in zip(chunk, translated_paragraphs):
         text_nodes = pu["text_nodes"]
-        if not text_nodes:
-            continue
+        if not text_nodes: continue
 
-        # Calculate original character counts to maintain ratio of formatting runs
         original_lengths = [len(node.text) if node.text else 0 for node in text_nodes]
-        total_original_chars = sum(original_lengths)
-
-        if total_original_chars == 0:
+        total_chars = sum(original_lengths)
+        
+        if total_chars == 0:
             text_nodes[0].text = translated_text
             continue
 
-        # Distribute the tagged/translated text across existing XML nodes
         cursor = 0
         for i, node in enumerate(text_nodes):
-            proportion = original_lengths[i] / total_original_chars
-            slice_length = int(round(len(translated_text) * proportion))
-
+            proportion = original_lengths[i] / total_chars
+            slice_len = int(round(len(translated_text) * proportion))
             if i == len(text_nodes) - 1:
-                # Ensure the last node gets everything remaining
                 node.text = translated_text[cursor:]
             else:
-                node.text = translated_text[cursor:cursor + slice_length]
-                cursor += slice_length
+                node.text = translated_text[cursor:cursor + slice_len]
+                cursor += slice_len
 
-# 3. XML & File Handling
-def extract_docx(docx_path):
-    temp_dir = tempfile.mkdtemp()
-    with zipfile.ZipFile(docx_path, 'r') as zip_ref:
-        zip_ref.extractall(temp_dir)
-    return temp_dir
-
-def collect_content_xml_files(root_dir):
-    word_dir = os.path.join(root_dir, "word")
-    xml_files = []
-    for root, dirs, files in os.walk(word_dir):
-        for file in files:
-            # Process main body, headers, footers, but skip styles and theme [cite: 715-747].
-            if file.endswith(".xml") and file not in EXCLUDED_FILES and "theme" not in root:
-                xml_files.append(os.path.join(root, file))
-    return xml_files
-
-def extract_paragraph_units(xml_path):
-    tree = etree.parse(xml_path)
-    root = tree.getroot()
-    paragraphs = root.xpath("//w:p", namespaces=NAMESPACE)
-    units = []
-    for p in paragraphs:
-        text_nodes = p.xpath(".//w:t", namespaces=NAMESPACE)
-        if not text_nodes: continue
-        full_text = "".join(node.text for node in text_nodes if node.text).strip()
-        if not full_text: continue
-        units.append({"xml_path": xml_path, "text_nodes": text_nodes, "full_text": full_text})
-    return tree, units
-
-# 4. Main Execution Pipeline
+# 4. FILE & PIPELINE MANAGEMENT
 def run_pipeline(input_docx, output_docx):
-    temp_dir = extract_docx(input_docx)
-    xml_files = collect_content_xml_files(temp_dir)
+    # Setup temp workspace
+    temp_dir = tempfile.mkdtemp()
+    with zipfile.ZipFile(input_docx, 'r') as zip_ref:
+        zip_ref.extractall(temp_dir)
+    
+    # Collect all text-bearing XMLs (Body, Footers, Headers)
+    xml_files = []
+    for root, _, files in os.walk(os.path.join(temp_dir, "word")):
+        for f in files:
+            if f.endswith(".xml") and f not in EXCLUDED_FILES and "theme" not in root:
+                xml_files.append(os.path.join(root, f))
     
     all_units = []
     trees = {}
+    for f_path in xml_files:
+        tree = etree.parse(f_path)
+        trees[f_path] = tree
+        for p in tree.getroot().xpath("//w:p", namespaces=NAMESPACE):
+            nodes = p.xpath(".//w:t", namespaces=NAMESPACE)
+            if not nodes: continue
+            full_txt = "".join(n.text for n in nodes if n.text).strip()
+            if full_txt:
+                all_units.append({"text_nodes": nodes, "full_text": full_txt})
 
-    # Step 1: Extract text units and store XML trees in memory
-    for xml_file in xml_files:
-        tree, units = extract_paragraph_units(xml_file)
-        trees[xml_file] = tree
-        all_units.extend(units)
-
-    # Step 2: Tag and Re-inject (Styles are preserved via proportional slicing)
+    # Process and Inject
     inject_translated_chunk(all_units)
 
-    # Step 3: Write modified XML back to temp folder
-    for xml_path, tree in trees.items():
-        tree.write(xml_path, xml_declaration=True, encoding="UTF-8", standalone="yes")
+    # Save XMLs back to disk
+    for path, tree in trees.items():
+        tree.write(path, xml_declaration=True, encoding="UTF-8", standalone="yes")
 
-    # Step 4: Final Re-zip into new DOCX
+    # Re-package DOCX
     if os.path.exists(output_docx): os.remove(output_docx)
     with zipfile.ZipFile(output_docx, 'w', zipfile.ZIP_DEFLATED) as docx_zip:
-        for foldername, subfolders, filenames in os.walk(temp_dir):
+        for foldername, _, filenames in os.walk(temp_dir):
             for filename in filenames:
                 f_path = os.path.join(foldername, filename)
                 docx_zip.write(f_path, os.path.relpath(f_path, temp_dir))
     
     shutil.rmtree(temp_dir)
-    print(f"Refactor complete! File saved as {output_docx}")
+    print(f"Translation Complete! File saved: {output_docx}")
 
-# Execute the pipeline
-run_pipeline("document.docx", "document_translated.docx")
+if __name__ == "__main__":
+    run_pipeline("document.docx", "document_translated.docx")
