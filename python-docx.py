@@ -14,11 +14,11 @@ api_key = os.environ.get("OPENAI_API_KEY")
 
 # IMPORTANT: We point the client to the GitHub/Copilot inference endpoint
 # This is why your previous attempt showed an error—the default was api.openai.com
+# Updated for Netlight Codepilot
 client = OpenAI(
-    api_key=api_key,
-    base_url="https://models.inference.ai.azure.com" 
+    api_key=api_key, 
+    base_url="https://llm.netlight.ai/v1" # Netlight's custom gateway
 )
-
 # ... [The rest of the PROTECTED_TERMS and pipeline logic follows] ...
 
 PROTECTED_TERMS = [
