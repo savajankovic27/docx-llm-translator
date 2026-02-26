@@ -44,6 +44,7 @@ def call_llm(text):
 
     TEXT:
     {text}
+
     """
     try:
         response = client.chat.completions.create(
