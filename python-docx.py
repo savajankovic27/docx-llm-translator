@@ -7,8 +7,9 @@ import shutil
 from dotenv import load_dotenv
 from openai import OpenAI
 
-# 1. SETUP & CONFIGURATION
-# This loads your key from the .env file you created
+from snowflake_utils import get_snowflake_terms
+
+#Setup 
 load_dotenv()
 api_key = os.environ.get("OPENAI_API_KEY")
 
@@ -19,20 +20,25 @@ client = OpenAI(
     api_key=api_key, 
     base_url="https://llm.netlight.ai/v1" # Netlight's custom gateway
 )
-# ... [The rest of the PROTECTED_TERMS and pipeline logic follows] ...
+## PROTECTED TERMS HAS BEEN PHASED OUT. 
+# Instead, we're using a dynamic fetch from Snowflake, which is more maintainable and scalable.
 
-PROTECTED_TERMS = [
-    "Canada Development Investment Corporation", "CDEV", "CEI", "CEEFC", 
-    "CGF", "CGFIM", "CHHC", "CILGC", "CIC", "TMP Finance", "TMC", "IFRS", 
-    "GAAP", "IAS", "IASB", "ESG", "CEO", "CFO", "Trans Mountain Corporation", 
-    "Trans Mountain Pipeline", "Government of Canada", "16342451 CANADA INC."
-]
+# PROTECTED_TERMS = [
+#     "Canada Development Investment Corporation", "CDEV", "CEI", "CEEFC", 
+#     "CGF", "CGFIM", "CHHC", "CILGC", "CIC", "TMP Finance", "TMC", "IFRS", 
+#     "GAAP", "IAS", "IASB", "ESG", "CEO", "CFO", "Trans Mountain Corporation", 
+#     "Trans Mountain Pipeline", "Government of Canada", "16342451 CANADA INC."
+# ]
 
+PROTECTED_TERMS = get_snowflake_terms()
+# Protected words stay for the time being, still to be phased out
 PROTECTED_WORDS = {"CANADA", "DEVELOPMENT", "INVESTMENT", "CORPORATION"}
 NAMESPACE = {"w": "http://schemas.openxmlformats.org/wordprocessingml/2006/main"}
 EXCLUDED_FILES = {"styles.xml", "settings.xml", "fontTable.xml", "webSettings.xml"}
 
-# 2. AI TRANSLATION ENGINE (Targeting GPT-4o via Copilot)
+#Translation engine. 
+
+#Ideally, in the future, this would be a more complex query, where the user would be able to change the prompt more easily and dynamically. For now, we keep it simple and hardcoded for the sake of the prototype.
 def call_llm(text):
     prompt = f"""
     You are a professional translator for a Canadian government investment corporation.
@@ -55,8 +61,8 @@ def call_llm(text):
     except Exception as e:
         print(f"AI Translation Error: {e}")
         return text + " [TRANSLATION_FAILED]"
-
-# 3. PROCESSING LOGIC
+    
+#Processing Logic and Injection
 def translate_chunk(chunk):
     translated = []
     for pu in chunk:
