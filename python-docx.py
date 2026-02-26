@@ -37,9 +37,8 @@ def call_llm(text):
     prompt = f"""
     You are a professional translator for a Canadian government investment corporation.
     Translate the following English text into professional Canadian French.
-
     STRICT RULES:
-    1. Any word followed by "[PROT]" is a protected trademark. Keep it EXACTLY as is but REMOVE the "[PROT]" tag.
+    1. Any word or phrase immediately followed by "[PROT]" is a protected trademark. Keep the word EXACTLY as it is, but REMOVE the "[PROT]" tag in the final output.
     2. Maintain a formal, institutional tone.
     3. Output ONLY the translated text. No commentary.
 
@@ -58,28 +57,29 @@ def call_llm(text):
 
 # 3. PROCESSING LOGIC
 def translate_chunk(chunk):
-    """
-    Handles protection logic and coordinates the LLM translation.
-    """
     translated = []
     for pu in chunk:
         text = pu["full_text"]
         text_stripped = text.strip()
 
-        # A. Handle Logo/Signature blocks (No translation)
+        # Handle logo words & protected terms without AI
         if text_stripped.upper() in PROTECTED_WORDS or any(text_stripped == term for term in PROTECTED_TERMS):
             translated.append(text)
             continue
 
-        # B. Tag protected terms within the sentence
+        # Tag protected terms for the AI
         tagged_text = text
         for term in PROTECTED_TERMS:
             pattern = re.compile(rf"\b({re.escape(term)})\b", re.IGNORECASE)
             tagged_text = pattern.sub(r"\1 [PROT]", tagged_text)
 
-        # C. Call the AI for translation
-        french_text = call_llm(tagged_text)
-        translated.append(french_text + " [FR]")
+        # Call the AI
+        french_translation = call_llm(tagged_text)
+        
+        # WE REMOVE THE + " [FR]" HERE
+        # The AI already removes [PROT] based on our prompt instructions
+        translated.append(french_translation) 
+            
     return translated
 
 def inject_translated_chunk(chunk):
