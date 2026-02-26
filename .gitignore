@@ -1,8 +1,12 @@
-# Environment and Virtual Env
+# Environment variables
 .env
+
+# Local Python utilities
+snowflake_utils.py
+
+# Virtual Environment
 venv/
 __pycache__/
 
-# Specific local utility files
-snowflake_utils.py
-
+# Output files
+document_translated.docx
