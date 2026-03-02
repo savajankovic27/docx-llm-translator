@@ -7,7 +7,7 @@ import shutil
 from dotenv import load_dotenv
 from openai import OpenAI
 
-from snowflake_utils import get_snowflake_terms
+from snowflake_utils import get_snowflake_terms, log_token_usage
 
 #Setup 
 load_dotenv()
@@ -54,17 +54,23 @@ def call_llm(text):
     """
     try:
         response = client.chat.completions.create(
-        model="gpt-4o", # OR try "openai/gpt-4o" if plain "gpt-4o" fails
-        messages=[{"role": "user", "content": prompt}]
+            model="gpt-4o",
+            messages=[{"role": "user", "content": prompt}]
         ) 
-        return response.choices[0].message.content.strip()
+        # Capture total tokens (prompt + completion)
+        tokens = response.usage.total_tokens 
+        return response.choices[0].message.content.strip(), tokens
     except Exception as e:
-        print(f"AI Translation Error: {e}")
-        return text + " [TRANSLATION_FAILED]"
+        return text, 0
+    
+    # In the try statement, we return both the translated text, and the token count. 
+    
+    
     
 #Processing Logic and Injection
 def translate_chunk(chunk):
     translated = []
+    total_tokens = 0
     for pu in chunk:
         text = pu["full_text"]
         text_stripped = text.strip()
@@ -81,19 +87,19 @@ def translate_chunk(chunk):
             tagged_text = pattern.sub(r"\1 [PROT]", tagged_text)
 
         # Call the AI
-        french_translation = call_llm(tagged_text)
-        
-        # WE REMOVE THE + " [FR]" HERE
+        french_text, tokens = call_llm(tagged_text)
+        total_tokens += tokens
+
         # The AI already removes [PROT] based on our prompt instructions
-        translated.append(french_translation) 
-            
-    return translated
+        translated.append(french_text)
+
+    return translated, total_tokens
 
 def inject_translated_chunk(chunk):
     """
     Re-injects text using Proportional Distribution to preserve bold/italics.
     """
-    translated_paragraphs = translate_chunk(chunk)
+    translated_paragraphs, total_tokens = translate_chunk(chunk)
     for pu, translated_text in zip(chunk, translated_paragraphs):
         text_nodes = pu["text_nodes"]
         if not text_nodes: continue
@@ -114,6 +120,8 @@ def inject_translated_chunk(chunk):
             else:
                 node.text = translated_text[cursor:cursor + slice_len]
                 cursor += slice_len
+
+    return total_tokens
 
 # 4. FILE & PIPELINE MANAGEMENT
 def run_pipeline(input_docx, output_docx):
@@ -142,7 +150,9 @@ def run_pipeline(input_docx, output_docx):
                 all_units.append({"text_nodes": nodes, "full_text": full_txt})
 
     # Process and Inject
-    inject_translated_chunk(all_units)
+    total_tokens = inject_translated_chunk(all_units)
+    log_token_usage(total_tokens)
+    print(f"Total tokens used: {total_tokens}")
 
     # Save XMLs back to disk
     for path, tree in trees.items():
