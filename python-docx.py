@@ -137,7 +137,7 @@ def run_pipeline(input_docx, output_docx):
             if f.endswith(".xml") and f not in EXCLUDED_FILES and "theme" not in root:
                 xml_files.append(os.path.join(root, f))
     
-    all_units = []
+    all_units = [] ## Run_Pipeline extracts text nodes into the flat list all_units. To batch by paragraph, we will modify the loop to keep text nodes group by their current paragraph. 
     trees = {}
     for f_path in xml_files:
         tree = etree.parse(f_path)
