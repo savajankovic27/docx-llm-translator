@@ -68,32 +68,30 @@ def call_llm(text):
     
     
 #Processing Logic and Injection
-def translate_chunk(chunk):
-    translated = []
-    total_tokens = 0
-    for pu in chunk:
-        text = pu["full_text"]
-        text_stripped = text.strip()
+def translate_chunk(paragraph_list):
+    translated_results = []
+    total_tokens_used = 0
 
-        # Handle logo words & protected terms without AI
-        if text_stripped.upper() in PROTECTED_WORDS or any(text_stripped == term for term in PROTECTED_TERMS):
-            translated.append(text)
+    for para in paragraph_list:
+        text = para["full_text"]
+
+        # 1. Skip translation if the paragraph is just a protected term/word
+        if text.upper() in PROTECTED_WORDS or any(text == term for term in PROTECTED_TERMS):
+            translated_results.append(text)
             continue
 
-        # Tag protected terms for the AI
+        # 2. Tag protected terms
         tagged_text = text
         for term in PROTECTED_TERMS:
             pattern = re.compile(rf"\b({re.escape(term)})\b", re.IGNORECASE)
             tagged_text = pattern.sub(r"\1 [PROT]", tagged_text)
 
-        # Call the AI
-        french_text, tokens = call_llm(tagged_text)
-        total_tokens += tokens
-
-        # The AI already removes [PROT] based on our prompt instructions
-        translated.append(french_text)
-
-    return translated, total_tokens
+        # 3. Call LLM (Now returning text and tokens)
+        french_translation, tokens = call_llm(tagged_text)
+        translated_results.append(french_translation)
+        total_tokens_used += tokens
+            
+    return translated_results, total_tokens_used
 
 def inject_translated_chunk(chunk):
     """
@@ -139,18 +137,37 @@ def run_pipeline(input_docx, output_docx):
     
     all_units = [] ## Run_Pipeline extracts text nodes into the flat list all_units. To batch by paragraph, we will modify the loop to keep text nodes group by their current paragraph. 
     trees = {}
+
+    all_paragraphs = [] ## Paragraph list. 
+
     for f_path in xml_files:
         tree = etree.parse(f_path)
         trees[f_path] = tree
         for p in tree.getroot().xpath("//w:p", namespaces=NAMESPACE):
-            nodes = p.xpath(".//w:t", namespaces=NAMESPACE)
+            nodes = p.xpath(".//w:t", namespaces=NAMESPACE) ## We use these as delimeters to split the paragraphs up. These paragraphs will be units that will be sent to the LLM calls, henceforth limiting the number of calls, and furthermore reducing costs. 
             if not nodes: continue
+                
             full_txt = "".join(n.text for n in nodes if n.text).strip()
+
             if full_txt:
-                all_units.append({"text_nodes": nodes, "full_text": full_txt})
+                all_paragraphs.append({
+                    "text_nodes": nodes, 
+                    "full_text": full_txt
+                })
+
+
+    # for f_path in xml_files:
+    #     tree = etree.parse(f_path)
+    #     trees[f_path] = tree
+    #     for p in tree.getroot().xpath("//w:p", namespaces=NAMESPACE):
+    #         nodes = p.xpath(".//w:t", namespaces=NAMESPACE)
+    #         if not nodes: continue
+    #         full_txt = "".join(n.text for n in nodes if n.text).strip()
+    #         if full_txt:
+    #             all_units.append({"text_nodes": nodes, "full_text": full_txt})
 
     # Process and Inject
-    total_tokens = inject_translated_chunk(all_units)
+    total_tokens = inject_translated_chunk(all_paragraphs)
     log_token_usage(total_tokens)
     print(f"Total tokens used: {total_tokens}")
 
