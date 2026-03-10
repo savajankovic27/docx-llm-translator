@@ -1,5 +1,97 @@
 {
     "python.analysis.extraPaths": [
         "./python-"
+    ],
+    "sqltools.connections": [
+        {
+            "pgOptions": {
+                "ssl": {
+                    "rejectUnauthorized": false
+                }
+            },
+            "ssh": "Disabled",
+            "previewLimit": 50,
+            "server": "translator-engine-db.czy4a66uyyg2.eu-west-1.rds.amazonaws.com",
+            "port": 5432,
+            "askForPassword": true,
+            "driver": "PostgreSQL",
+            "name": "My RDS DB",
+            "database": "translator-engine-db",
+            "username": "postgres"
+        },
+        {
+            "pgOptions": {
+                "ssl": {
+                    "rejectUnauthorized": false
+                }
+            },
+            "ssh": "Disabled",
+            "previewLimit": 50,
+            "server": "translator-engine-db.czy4a66uyyg2.eu-west-1.rds.amazonaws.com",
+            "port": 5432,
+            "askForPassword": true,
+            "driver": "PostgreSQL",
+            "name": "Translator DB",
+            "database": "translator-engine-db",
+            "username": "postgres"
+        },
+        {
+            "ssh": "Disabled",
+            "previewLimit": 50,
+            "server": "localhost",
+            "port": 5432,
+            "askForPassword": true,
+            "driver": "PostgreSQL",
+            "name": "Translator Engine",
+            "database": "translator-engine-db",
+            "username": "postgres"
+        },
+        {
+            "pgOptions": {
+                "ssl": {
+                    "rejectUnauthorized": true
+                }
+            },
+            "ssh": "Disabled",
+            "previewLimit": 50,
+            "server": "localhost",
+            "port": 5432,
+            "driver": "PostgreSQL",
+            "name": "Translator Engine ",
+            "username": "postgres",
+            "database": "translator-engine-db"
+        },
+        {
+            "pgOptions": {
+                "ssl": {
+                    "rejectUnauthorized": false
+                }
+            },
+            "ssh": "Disabled",
+            "previewLimit": 50,
+            "server": "localhost",
+            "port": 5432,
+            "askForPassword": true,
+            "driver": "PostgreSQL",
+            "name": "Translator Engine2",
+            "database": "translator-engine-db",
+            "username": "postgres"
+        },
+        {
+            "pgOptions": {
+                "ssl": {
+                    "rejectUnauthorized": false
+                }
+            },
+            "ssh": "Disabled",
+            "previewLimit": 50,
+            "server": "localhost",
+            "port": 5432,
+            "askForPassword": true,
+            "driver": "PostgreSQL",
+            "name": "Engine2",
+            "database": "postgres",
+            "username": "postgres"
+        }
     ]
 }

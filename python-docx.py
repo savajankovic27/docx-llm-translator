@@ -6,7 +6,10 @@ import re
 import shutil
 from dotenv import load_dotenv
 from openai import OpenAI
-from snowflake_utils import get_snowflake_terms, log_token_usage
+from rds_utils import get_rds_terms as get_snowflake_terms, log_token_usage
+
+# TO:
+
 
 # 1. SETUP
 load_dotenv()
