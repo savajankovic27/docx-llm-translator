@@ -24,6 +24,22 @@ NAMESPACE = {"w": "http://schemas.openxmlformats.org/wordprocessingml/2006/main"
              "xml": "http://www.w3.org/XML/1998/namespace"}
 EXCLUDED_FILES = {"styles.xml", "settings.xml", "fontTable.xml", "webSettings.xml"}
 BATCH_SIZE = 20
+W_NS = "http://schemas.openxmlformats.org/wordprocessingml/2006/main"
+
+def get_translatable_nodes(paragraph):
+    """Returns only w:t nodes that are outside field characters (excludes page numbers, TOC fields etc.)"""
+    in_field = 0
+    text_nodes = []
+    for elem in paragraph.iter():
+        if elem.tag == f"{{{W_NS}}}fldChar":
+            fld_type = elem.get(f"{{{W_NS}}}fldCharType")
+            if fld_type == "begin":
+                in_field += 1
+            elif fld_type == "end":
+                in_field -= 1
+        elif elem.tag == f"{{{W_NS}}}t" and in_field == 0:
+            text_nodes.append(elem)
+    return text_nodes
 
 # 2. TRANSLATION ENGINE
 def call_llm_batch(texts):
@@ -122,7 +138,7 @@ def run_pipeline(input_docx, output_docx):
         tree = etree.parse(f_path)
         trees[f_path] = tree
         for p in tree.xpath("//w:p", namespaces=NAMESPACE):
-            nodes = p.xpath(".//w:t", namespaces=NAMESPACE)
+            nodes = get_translatable_nodes(p)
             if nodes:
                 txt = "".join(n.text for n in nodes if n.text).strip()
                 if txt: all_paras.append({"text_nodes": nodes, "full_text": txt})
@@ -130,7 +146,8 @@ def run_pipeline(input_docx, output_docx):
     # Single pass processing to save $$$
     total_tokens = process_paragraphs(all_paras)
     log_token_usage(total_tokens)
-    print(f"Logged {total_tokens} tokens to Snowflake.")
+    #Phased out 
+    ##print(f"Logged {total_tokens} tokens to Snowflake.")
 
     # Save XMLs using binary write to prevent corruption
     for path, tree in trees.items():
