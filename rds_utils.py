@@ -53,9 +53,9 @@ def log_token_usage(token_count):
         # Create table if it doesn't exist yet
         cursor.execute("""
             CREATE TABLE IF NOT EXISTS llm_token_count (
-                id SERIAL PRIMARY KEY,
+                run_number SERIAL PRIMARY KEY,
                 number_of_tokens INTEGER,
-                logged_at TIMESTAMP DEFAULT NOW()
+                run_date TIMESTAMP DEFAULT NOW()
             )
         """)
 
