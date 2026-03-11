@@ -1,4 +1,1 @@
-
-SELECT * FROM protected_glossary;
-
-
+SELECT * FROM llm_token_count;

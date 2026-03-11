@@ -23,27 +23,41 @@ PROTECTED_WORDS = {"CANADA", "DEVELOPMENT", "INVESTMENT", "CORPORATION"}
 NAMESPACE = {"w": "http://schemas.openxmlformats.org/wordprocessingml/2006/main",
              "xml": "http://www.w3.org/XML/1998/namespace"}
 EXCLUDED_FILES = {"styles.xml", "settings.xml", "fontTable.xml", "webSettings.xml"}
+BATCH_SIZE = 20
 
 # 2. TRANSLATION ENGINE
-def call_llm(text):
-    # System/User structure reduces prompt overhead and cost
-    prompt = f"System: Professional CA-FR translator for gov investment corp. Rules: 1. Keep [PROT] terms, remove tag. 2. Formal. 3. Translation ONLY.\nUser: {text}"
+def call_llm_batch(texts):
+    numbered = "\n".join(f"{i+1}. {t}" for i, t in enumerate(texts))
     try:
         response = client.chat.completions.create(
             model="gpt-4o",
-            messages=[{"role": "user", "content": prompt}]
-        ) 
-        return response.choices[0].message.content.strip(), response.usage.total_tokens
+            messages=[
+                {"role": "system", "content": "Professional CA-FR translator for gov investment corp. Rules: 1. Keep [PROT] terms, remove tag. 2. Formal. 3. Return ONLY translations numbered to match input, one per line."},
+                {"role": "user", "content": numbered}
+            ]
+        )
+        content = response.choices[0].message.content.strip()
+        total_tokens = response.usage.total_tokens
+        # Parse numbered lines back into a list
+        results = {}
+        for line in content.split("\n"):
+            m = re.match(r'^(\d+)\.\s*(.*)', line.strip())
+            if m:
+                results[int(m.group(1))] = m.group(2).strip()
+        translations = [results.get(i + 1, texts[i]) for i in range(len(texts))]
+        return translations, total_tokens
     except Exception as e:
         print(f"API Error: {e}")
-        return text, 0
+        return texts, 0
 
 # 3. CORE LOGIC: BATCHED PARAGRAPHS
 def process_paragraphs(paragraph_list):
     total_tokens = 0
+    to_translate = []
+
     for para in paragraph_list:
         original_text = para["full_text"]
-        
+
         # Skip if only protected words
         if original_text.upper() in PROTECTED_WORDS or any(original_text == t for t in PROTECTED_TERMS):
             continue
@@ -54,12 +68,17 @@ def process_paragraphs(paragraph_list):
             pattern = re.compile(rf"\b({re.escape(term)})\b", re.IGNORECASE)
             tagged = pattern.sub(r"\1 [PROT]", tagged)
 
-        translation, tokens = call_llm(tagged)
+        to_translate.append((para, tagged))
+
+    # Send in batches instead of one call per paragraph
+    for i in range(0, len(to_translate), BATCH_SIZE):
+        batch = to_translate[i:i + BATCH_SIZE]
+        texts = [tagged for _, tagged in batch]
+        translations, tokens = call_llm_batch(texts)
         total_tokens += tokens
-        
-        # Re-inject using whitespace preservation
-        inject_text(para["text_nodes"], translation)
-    
+        for (para, _), translation in zip(batch, translations):
+            inject_text(para["text_nodes"], translation)
+
     return total_tokens
 
 def inject_text(nodes, translated_text):
