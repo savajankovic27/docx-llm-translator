@@ -77,6 +77,7 @@ def process_paragraphs(paragraph_list):
         translations, tokens = call_llm_batch(texts)
         total_tokens += tokens
         for (para, _), translation in zip(batch, translations):
+            translation = re.sub(r'\s*\[PROT\]', '', translation)
             inject_text(para["text_nodes"], translation)
 
     return total_tokens
