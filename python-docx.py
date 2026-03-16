@@ -16,7 +16,13 @@ client = OpenAI(
 )
 
 # PROTECTED_TERMS = get_snowflake_terms()
-PROTECTED_TERMS = ["CDEV", "CEEFC", "TMC"]  # TODO: restore from RDS
+PROTECTED_TERMS = [
+    "Canada Development Investment Corporation", "CDEV", "CEI", "CEEFC", "CGF",
+    "CGFIM", "CHHC", "CILGC", "CIC", "TMP Finance", "TMC", "IFRS", "GAAP",
+    "IAS", "IASB", "ESG", "CEO", "CFO", "Trans Mountain Corporation",
+    "Trans Mountain Pipeline", "Government of Canada", "16342451 CANADA INC.",
+    "CANADA", "DEVELOPMENT", "INVESTMENT", "CORPORATION"
+]  # TODO: restore from RDS
 PROTECTED_WORDS = {"CANADA", "DEVELOPMENT", "INVESTMENT", "CORPORATION"}
 NAMESPACE = {"w": "http://schemas.openxmlformats.org/wordprocessingml/2006/main",
              "xml": "http://www.w3.org/XML/1998/namespace"}
