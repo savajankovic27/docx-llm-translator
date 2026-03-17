@@ -6,7 +6,7 @@ import re
 import shutil
 from dotenv import load_dotenv
 from openai import OpenAI
-from rds_utils import get_rds_terms as get_snowflake_terms, log_token_usage
+# from rds_utils import get_rds_terms as get_snowflake_terms, log_token_usage
 
 # 1. SETUP
 load_dotenv()
@@ -15,7 +15,14 @@ client = OpenAI(
     base_url="https://llm.netlight.ai/v1"
 )
 
-PROTECTED_TERMS = get_snowflake_terms()
+# PROTECTED_TERMS = get_snowflake_terms()
+PROTECTED_TERMS = [
+    "Canada Development Investment Corporation", "CDEV", "CEI", "CEEFC", "CGF",
+    "CGFIM", "CHHC", "CILGC", "CIC", "TMP Finance", "TMC", "IFRS", "GAAP",
+    "IAS", "IASB", "ESG", "CEO", "CFO", "Trans Mountain Corporation",
+    "Trans Mountain Pipeline", "Government of Canada", "16342451 CANADA INC.",
+    "CANADA", "DEVELOPMENT", "INVESTMENT", "CORPORATION"
+]  # TODO: restore from RDS
 PROTECTED_WORDS = {"CANADA", "DEVELOPMENT", "INVESTMENT", "CORPORATION"}
 NAMESPACE = {"w": "http://schemas.openxmlformats.org/wordprocessingml/2006/main",
              "xml": "http://www.w3.org/XML/1998/namespace"}
@@ -142,9 +149,8 @@ def run_pipeline(input_docx, output_docx):
 
     # Single pass processing to save $$$
     total_tokens = process_paragraphs(all_paras)
-    log_token_usage(total_tokens)
-    #Phased out 
-    ##print(f"Logged {total_tokens} tokens to Snowflake.")
+    # log_token_usage(total_tokens)  # TODO: restore when RDS is back
+    print(f"Total tokens used: {total_tokens}")
 
     # Save XMLs using binary write to prevent corruption
     for path, tree in trees.items():

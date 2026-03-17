@@ -11,7 +11,7 @@ def get_rds_terms():
     """
     try:
         conn = psycopg2.connect(
-            host=os.environ.get("RDS_HOST"),        # your RDS endpoint
+            host=os.environ.get("RDS_HOST"),        #  RDS endpoint
             port=os.environ.get("RDS_PORT", 5432),
             dbname=os.environ.get("RDS_DB", "postgres"),
             user=os.environ.get("RDS_USER", "postgres"),
