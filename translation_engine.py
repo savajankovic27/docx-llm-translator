@@ -20,14 +20,13 @@ PROTECTED_TERMS = [
     "Canada Development Investment Corporation", "CDEV", "CEI", "CEEFC", "CGF",
     "CGFIM", "CHHC", "CILGC", "CIC", "TMP Finance", "TMC", "IFRS", "GAAP",
     "IAS", "IASB", "ESG", "CEO", "CFO", "Trans Mountain Corporation",
-    "Trans Mountain Pipeline", "Government of Canada", "16342451 CANADA INC.",
-    "CANADA", "DEVELOPMENT", "INVESTMENT", "CORPORATION"
-]  # TODO: restore from RDS
-PROTECTED_WORDS = {"CANADA", "DEVELOPMENT", "INVESTMENT", "CORPORATION"}
+    "Trans Mountain Pipeline", "Government of Canada", "16342451 CANADA INC."
+] # TODO: restore from RDS
+PROTECTED_WORDS = set()
 NAMESPACE = {"w": "http://schemas.openxmlformats.org/wordprocessingml/2006/main",
              "xml": "http://www.w3.org/XML/1998/namespace"}
 EXCLUDED_FILES = {"styles.xml", "settings.xml", "fontTable.xml", "webSettings.xml"}
-BATCH_SIZE = 20
+BATCH_SIZE = 5
 W_NS = "http://schemas.openxmlformats.org/wordprocessingml/2006/main"
 
 def get_translatable_nodes(paragraph):
@@ -46,25 +45,25 @@ def get_translatable_nodes(paragraph):
     return text_nodes
 
 # 2. TRANSLATION ENGINE
+SEPARATOR = "|||"
+
 def call_llm_batch(texts):
-    numbered = "\n".join(f"{i+1}. {t}" for i, t in enumerate(texts))
+    joined = f"\n{SEPARATOR}\n".join(texts)
     try:
         response = client.chat.completions.create(
             model="gpt-4o",
             messages=[
-                {"role": "system", "content": "Professional CA-FR translator for gov investment corp. Rules: 1. Keep [PROT] terms, remove tag. 2. Formal. 3. Return ONLY translations numbered to match input, one per line."},
-                {"role": "user", "content": numbered}
+                {"role": "system", "content": f"Professional Canadian-French translator. Rules: 1. Keep [PROT] terms, remove tag. 2. Formal. 3. Translate each segment separated by '{SEPARATOR}' and return them separated by '{SEPARATOR}' in the same order. Do not add or remove separators."},
+                {"role": "user", "content": joined}
             ]
         )
         content = response.choices[0].message.content.strip()
         total_tokens = response.usage.total_tokens
-        # Parse numbered lines back into a list
-        results = {}
-        for line in content.split("\n"):
-            m = re.match(r'^(\d+)\.\s*(.*)', line.strip())
-            if m:
-                results[int(m.group(1))] = m.group(2).strip()
-        translations = [results.get(i + 1, texts[i]) for i in range(len(texts))]
+        translations = [t.strip() for t in content.split(SEPARATOR)]
+        # Fallback if count doesn't match
+        if len(translations) != len(texts):
+            print(f"Warning: expected {len(texts)} translations, got {len(translations)}")
+            return texts, total_tokens
         return translations, total_tokens
     except Exception as e:
         print(f"API Error: {e}")
