@@ -20,14 +20,13 @@ PROTECTED_TERMS = [
     "Canada Development Investment Corporation", "CDEV", "CEI", "CEEFC", "CGF",
     "CGFIM", "CHHC", "CILGC", "CIC", "TMP Finance", "TMC", "IFRS", "GAAP",
     "IAS", "IASB", "ESG", "CEO", "CFO", "Trans Mountain Corporation",
-    "Trans Mountain Pipeline", "Government of Canada", "16342451 CANADA INC.",
-    "CANADA", "DEVELOPMENT", "INVESTMENT", "CORPORATION"
-]  # TODO: restore from RDS
-PROTECTED_WORDS = {"CANADA", "DEVELOPMENT", "INVESTMENT", "CORPORATION"}
+    "Trans Mountain Pipeline", "Government of Canada", "16342451 CANADA INC."
+] # TODO: restore from RDS
+PROTECTED_WORDS = set()
 NAMESPACE = {"w": "http://schemas.openxmlformats.org/wordprocessingml/2006/main",
              "xml": "http://www.w3.org/XML/1998/namespace"}
 EXCLUDED_FILES = {"styles.xml", "settings.xml", "fontTable.xml", "webSettings.xml"}
-BATCH_SIZE = 20
+BATCH_SIZE = 5
 W_NS = "http://schemas.openxmlformats.org/wordprocessingml/2006/main"
 
 def get_translatable_nodes(paragraph):
@@ -46,32 +45,32 @@ def get_translatable_nodes(paragraph):
     return text_nodes
 
 # 2. TRANSLATION ENGINE
+SEPARATOR = "|||"
+
 def call_llm_batch(texts):
-    numbered = "\n".join(f"{i+1}. {t}" for i, t in enumerate(texts))
+    joined = f"\n{SEPARATOR}\n".join(texts)
     try:
         response = client.chat.completions.create(
             model="gpt-4o",
             messages=[
-                {"role": "system", "content": "Professional CA-FR translator for gov investment corp. Rules: 1. Keep [PROT] terms, remove tag. 2. Formal. 3. Return ONLY translations numbered to match input, one per line."},
-                {"role": "user", "content": numbered}
+                {"role": "system", "content": f"Professional Canadian-French translator. Rules: 1. Keep [PROT] terms, remove tag. 2. Formal. 3. Translate each segment separated by '{SEPARATOR}' and return them separated by '{SEPARATOR}' in the same order. Do not add or remove separators."},
+                {"role": "user", "content": joined}
             ]
         )
         content = response.choices[0].message.content.strip()
         total_tokens = response.usage.total_tokens
-        # Parse numbered lines back into a list
-        results = {}
-        for line in content.split("\n"):
-            m = re.match(r'^(\d+)\.\s*(.*)', line.strip())
-            if m:
-                results[int(m.group(1))] = m.group(2).strip()
-        translations = [results.get(i + 1, texts[i]) for i in range(len(texts))]
+        translations = [t.strip() for t in content.split(SEPARATOR)]
+        # Fallback if count doesn't match
+        if len(translations) != len(texts):
+            print(f"Warning: expected {len(texts)} translations, got {len(translations)}")
+            return texts, total_tokens
         return translations, total_tokens
     except Exception as e:
         print(f"API Error: {e}")
         return texts, 0
 
 # 3. CORE LOGIC: BATCHED PARAGRAPHS
-def process_paragraphs(paragraph_list):
+def process_paragraphs(paragraph_list, progress_callback=None):
     total_tokens = 0
     to_translate = []
 
@@ -82,7 +81,7 @@ def process_paragraphs(paragraph_list):
         if original_text.upper() in PROTECTED_WORDS or any(original_text == t for t in PROTECTED_TERMS):
             continue
 
-        # Tag terms for AI
+        # Tag protected terms
         tagged = original_text
         for term in PROTECTED_TERMS:
             pattern = re.compile(rf"\b({re.escape(term)})\b", re.IGNORECASE)
@@ -90,8 +89,10 @@ def process_paragraphs(paragraph_list):
 
         to_translate.append((para, tagged))
 
+    total_batches = max(1, -(-len(to_translate) // BATCH_SIZE))  # ceiling division
+
     # Send in batches instead of one call per paragraph
-    for i in range(0, len(to_translate), BATCH_SIZE):
+    for batch_idx, i in enumerate(range(0, len(to_translate), BATCH_SIZE)):
         batch = to_translate[i:i + BATCH_SIZE]
         texts = [tagged for _, tagged in batch]
         translations, tokens = call_llm_batch(texts)
@@ -100,32 +101,82 @@ def process_paragraphs(paragraph_list):
             translation = re.sub(r'\s*\[PROT\]', '', translation)
             inject_text(para["text_nodes"], translation)
 
+        if progress_callback:
+            progress_callback(batch_idx + 1, total_batches)
+
     return total_tokens
+
+def _run_fmt_key(node):
+    """Returns bold status of the run — the meaningful formatting boundary for distribution."""
+    run = node.getparent()
+    if run is None:
+        return False
+    rpr = run.find(f"{{{W_NS}}}rPr")
+    if rpr is None:
+        return False
+    return rpr.find(f"{{{W_NS}}}b") is not None
 
 def inject_text(nodes, translated_text):
     """
-    Distributes text while preserving 'xml:space=preserve' to prevent word sticking.
+    Groups consecutive nodes by run formatting, distributes translated text
+    proportionally at the group level (not per-node), snapping to word boundaries.
+    Within each group the first node gets all the text, the rest are cleared.
+    This prevents bold/color from bleeding across formatting boundaries.
     """
-    total_orig_len = sum(len(n.text) for n in nodes if n.text) or 1
-    cursor = 0
-    
-    for i, node in enumerate(nodes):
-        if not node.text and i < len(nodes) - 1: continue
-        
-        # Proportional slicing
-        prop = len(node.text) / total_orig_len
-        slice_len = int(round(len(translated_text) * prop))
-        
-        content = translated_text[cursor:] if i == len(nodes)-1 else translated_text[cursor:cursor+slice_len]
-        node.text = content
-        cursor += slice_len
+    if not nodes:
+        return
 
-        # CRITICAL: Preserve leading/trailing spaces in XML
+    # Build formatting groups
+    groups = []
+    cur_nodes = [nodes[0]]
+    cur_key = _run_fmt_key(nodes[0])
+    for node in nodes[1:]:
+        key = _run_fmt_key(node)
+        if key == cur_key:
+            cur_nodes.append(node)
+        else:
+            groups.append(cur_nodes)
+            cur_nodes = [node]
+            cur_key = key
+    groups.append(cur_nodes)
+
+    # Single formatting group — everything into first node, clear the rest
+    if len(groups) == 1:
+        nodes[0].text = translated_text
+        if translated_text.startswith(" ") or translated_text.endswith(" "):
+            nodes[0].set("{http://www.w3.org/XML/1998/namespace}space", "preserve")
+        for node in nodes[1:]:
+            node.text = ""
+        return
+
+    # Multiple groups — proportional distribution at group level, snapped to word boundary
+    total_orig = sum(sum(len(n.text) for n in g if n.text) for g in groups) or 1
+    cursor = 0
+    for i, grp in enumerate(groups):
+        if i == len(groups) - 1:
+            content = translated_text[cursor:]
+        else:
+            grp_len = sum(len(n.text) for n in grp if n.text)
+            cut = cursor + int(round(len(translated_text) * grp_len / total_orig))
+            # Snap to nearest word boundary (forward or backward) to avoid splitting words
+            fwd = cut
+            while fwd < len(translated_text) and translated_text[fwd] not in (" ", "\n"):
+                fwd += 1
+            bwd = cut
+            while bwd > cursor and translated_text[bwd - 1] not in (" ", "\n"):
+                bwd -= 1
+            cut = fwd if abs(fwd - cut) <= abs(cut - bwd) else bwd
+            content = translated_text[cursor:cut]
+            cursor = cut
+
+        grp[0].text = content
         if content.startswith(" ") or content.endswith(" "):
-            node.set("{http://www.w3.org/XML/1998/namespace}space", "preserve")
+            grp[0].set("{http://www.w3.org/XML/1998/namespace}space", "preserve")
+        for node in grp[1:]:
+            node.text = ""
 
 # 4. PIPELINE
-def run_pipeline(input_docx, output_docx):
+def run_pipeline(input_docx, output_docx, progress_callback=None):
     temp_dir = tempfile.mkdtemp()
     with zipfile.ZipFile(input_docx, 'r') as z:
         z.extractall(temp_dir)
@@ -148,7 +199,7 @@ def run_pipeline(input_docx, output_docx):
                 if txt: all_paras.append({"text_nodes": nodes, "full_text": txt})
 
     # Single pass processing to save $$$
-    total_tokens = process_paragraphs(all_paras)
+    total_tokens = process_paragraphs(all_paras, progress_callback=progress_callback)
     # log_token_usage(total_tokens)  # TODO: restore when RDS is back
     print(f"Total tokens used: {total_tokens}")
 
