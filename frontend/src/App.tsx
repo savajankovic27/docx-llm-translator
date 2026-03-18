@@ -3,6 +3,7 @@ import UploadZone from "./components/UploadZone";
 import StatusBadge from "./components/StatusBadge";
 import SplitPane from "./components/SplitPane";
 import DocumentViewer from "./components/DocumentViewer";
+import ProgressBar from "./components/ProgressBar";
 
 type AppStatus = "idle" | "uploading" | "queued" | "processing" | "done" | "failed";
 
@@ -13,6 +14,7 @@ export default function App() {
   const [translatedBlob, setTranslatedBlob] = useState<Blob | null>(null);
   const [filename, setFilename] = useState<string>("");
   const [error, setError] = useState<string>("");
+  const [progress, setProgress] = useState<number>(0);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const stopPolling = () => {
@@ -29,6 +31,7 @@ export default function App() {
       try {
         const res = await fetch(`/status/${jobId}`);
         const data = await res.json();
+        if (typeof data.progress === "number") setProgress(data.progress);
         if (data.status === "done") {
           // Fetch translated file as blob for in-browser rendering
           const fileRes = await fetch(`/download/${jobId}`);
@@ -92,6 +95,7 @@ export default function App() {
     setTranslatedBlob(null);
     setFilename("");
     setError("");
+    setProgress(0);
   };
 
   // ── Split-pane view (after file selected) ──────────────────────────
@@ -123,6 +127,13 @@ export default function App() {
             </button>
           </div>
         </div>
+
+        {/* Progress bar — visible during processing */}
+        {status === "processing" && (
+          <div className="shrink-0 px-6 py-2 border-b border-gray-100 bg-white">
+            <ProgressBar progress={progress} />
+          </div>
+        )}
 
         {/* Split pane */}
         <div className="flex-1 overflow-hidden">

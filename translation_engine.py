@@ -70,7 +70,7 @@ def call_llm_batch(texts):
         return texts, 0
 
 # 3. CORE LOGIC: BATCHED PARAGRAPHS
-def process_paragraphs(paragraph_list):
+def process_paragraphs(paragraph_list, progress_callback=None):
     total_tokens = 0
     to_translate = []
 
@@ -89,8 +89,10 @@ def process_paragraphs(paragraph_list):
 
         to_translate.append((para, tagged))
 
+    total_batches = max(1, -(-len(to_translate) // BATCH_SIZE))  # ceiling division
+
     # Send in batches instead of one call per paragraph
-    for i in range(0, len(to_translate), BATCH_SIZE):
+    for batch_idx, i in enumerate(range(0, len(to_translate), BATCH_SIZE)):
         batch = to_translate[i:i + BATCH_SIZE]
         texts = [tagged for _, tagged in batch]
         translations, tokens = call_llm_batch(texts)
@@ -98,6 +100,9 @@ def process_paragraphs(paragraph_list):
         for (para, _), translation in zip(batch, translations):
             translation = re.sub(r'\s*\[PROT\]', '', translation)
             inject_text(para["text_nodes"], translation)
+
+        if progress_callback:
+            progress_callback(batch_idx + 1, total_batches)
 
     return total_tokens
 
@@ -171,7 +176,7 @@ def inject_text(nodes, translated_text):
             node.text = ""
 
 # 4. PIPELINE
-def run_pipeline(input_docx, output_docx):
+def run_pipeline(input_docx, output_docx, progress_callback=None):
     temp_dir = tempfile.mkdtemp()
     with zipfile.ZipFile(input_docx, 'r') as z:
         z.extractall(temp_dir)
@@ -194,7 +199,7 @@ def run_pipeline(input_docx, output_docx):
                 if txt: all_paras.append({"text_nodes": nodes, "full_text": txt})
 
     # Single pass processing to save $$$
-    total_tokens = process_paragraphs(all_paras)
+    total_tokens = process_paragraphs(all_paras, progress_callback=progress_callback)
     # log_token_usage(total_tokens)  # TODO: restore when RDS is back
     print(f"Total tokens used: {total_tokens}")
 

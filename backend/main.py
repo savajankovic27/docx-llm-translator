@@ -28,7 +28,13 @@ os.makedirs(UPLOAD_DIR, exist_ok=True)
 def run_translation_job(job_id: str, input_path: str, output_path: str):
     try:
         jobs[job_id]["status"] = "processing"
-        run_pipeline(input_path, output_path)
+        jobs[job_id]["progress"] = 0
+
+        def on_progress(done: int, total: int):
+            jobs[job_id]["progress"] = int((done / total) * 100)
+
+        run_pipeline(input_path, output_path, progress_callback=on_progress)
+        jobs[job_id]["progress"] = 100
         jobs[job_id]["status"] = "done"
     except Exception as e:
         jobs[job_id]["status"] = "failed"
@@ -58,7 +64,7 @@ def get_status(job_id: str):
     job = jobs.get(job_id)
     if not job:
         raise HTTPException(status_code=404, detail="Job not found")
-    return {"status": job["status"], "filename": job.get("filename")}
+    return {"status": job["status"], "filename": job.get("filename"), "progress": job.get("progress", 0)}
 
 
 @app.get("/download/{job_id}")
