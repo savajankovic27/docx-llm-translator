@@ -20,7 +20,7 @@ PROTECTED_TERMS = [
     "Canada Development Investment Corporation", "CDEV", "CEI", "CEEFC", "CGF",
     "CGFIM", "CHHC", "CILGC", "CIC", "TMP Finance", "TMC", "IFRS", "GAAP",
     "IAS", "IASB", "ESG", "CEO", "CFO", "Trans Mountain Corporation",
-    "Trans Mountain Pipeline", "Government of Canada", "16342451 CANADA INC."
+    "Trans Mountain Pipeline", "Government of Canada", "16342451 CANADA INC.", "CANADA DEVELOPMENT INVESTMENT CORPORATION"
 ] # TODO: restore from RDS
 PROTECTED_WORDS = set()
 NAMESPACE = {"w": "http://schemas.openxmlformats.org/wordprocessingml/2006/main",
@@ -149,23 +149,38 @@ def inject_text(nodes, translated_text):
             node.text = ""
         return
 
-    # Multiple groups — proportional distribution at group level, snapped to word boundary
+    # Multiple groups — find split point using colon detection or proportional fallback
     total_orig = sum(sum(len(n.text) for n in g if n.text) for g in groups) or 1
     cursor = 0
     for i, grp in enumerate(groups):
         if i == len(groups) - 1:
             content = translated_text[cursor:]
         else:
-            grp_len = sum(len(n.text) for n in grp if n.text)
-            cut = cursor + int(round(len(translated_text) * grp_len / total_orig))
-            # Snap to nearest word boundary (forward or backward) to avoid splitting words
-            fwd = cut
-            while fwd < len(translated_text) and translated_text[fwd] not in (" ", "\n"):
-                fwd += 1
-            bwd = cut
-            while bwd > cursor and translated_text[bwd - 1] not in (" ", "\n"):
-                bwd -= 1
-            cut = fwd if abs(fwd - cut) <= abs(cut - bwd) else bwd
+            cut = None
+
+            # If this group ends with ":" use the colon in the translated text as split point.
+            # This handles "Bold label: normal body" bullet patterns reliably.
+            grp_text = "".join(n.text or "" for n in grp)
+            if grp_text.rstrip().endswith(":"):
+                colon_pos = translated_text.find(":", cursor)
+                if colon_pos != -1:
+                    # Advance past the colon and any trailing space/nbsp
+                    cut = colon_pos + 1
+                    while cut < len(translated_text) and translated_text[cut] in (" ", "\xa0"):
+                        cut += 1
+
+            # Fallback: proportional split snapped to nearest word boundary
+            if cut is None:
+                grp_len = sum(len(n.text) for n in grp if n.text)
+                cut = cursor + int(round(len(translated_text) * grp_len / total_orig))
+                fwd = cut
+                while fwd < len(translated_text) and translated_text[fwd] not in (" ", "\n"):
+                    fwd += 1
+                bwd = cut
+                while bwd > cursor and translated_text[bwd - 1] not in (" ", "\n"):
+                    bwd -= 1
+                cut = fwd if abs(fwd - cut) <= abs(cut - bwd) else bwd
+
             content = translated_text[cursor:cut]
             cursor = cut
 
@@ -175,7 +190,6 @@ def inject_text(nodes, translated_text):
         for node in grp[1:]:
             node.text = ""
 
-# 4. PIPELINE
 def run_pipeline(input_docx, output_docx, progress_callback=None):
     temp_dir = tempfile.mkdtemp()
     with zipfile.ZipFile(input_docx, 'r') as z:

@@ -4,6 +4,7 @@ import sys
 from fastapi import FastAPI, UploadFile, HTTPException, BackgroundTasks
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
+from docx2pdf import convert
 
 # Allow importing translation_engine from parent directory
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -82,3 +83,22 @@ def download(job_id: str):
         media_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
         filename=f"{original_name}_translated.docx",
     )
+
+
+@app.get("/preview/{job_id}/{doc_type}")
+def preview_pdf(job_id: str, doc_type: str):
+    job = jobs.get(job_id)
+    if not job:
+        raise HTTPException(status_code=404, detail="Job not found")
+    if doc_type not in ("original", "translated"):
+        raise HTTPException(status_code=400, detail="doc_type must be 'original' or 'translated'")
+    if doc_type == "translated" and job["status"] != "done":
+        raise HTTPException(status_code=400, detail="Translation not ready")
+
+    docx_path = os.path.join(UPLOAD_DIR, f"{job_id}_{'input' if doc_type == 'original' else 'output'}.docx")
+    pdf_path = os.path.join(UPLOAD_DIR, f"{job_id}_{doc_type}.pdf")
+
+    if not os.path.exists(pdf_path):
+        convert(docx_path, pdf_path)
+
+    return FileResponse(pdf_path, media_type="application/pdf")

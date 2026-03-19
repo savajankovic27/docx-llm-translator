@@ -10,8 +10,8 @@ type AppStatus = "idle" | "uploading" | "queued" | "processing" | "done" | "fail
 export default function App() {
   const [status, setStatus] = useState<AppStatus>("idle");
   const [jobId, setJobId] = useState<string | null>(null);
-  const [originalFile, setOriginalFile] = useState<File | null>(null);
-  const [translatedBlob, setTranslatedBlob] = useState<Blob | null>(null);
+  const [originalPdfUrl, setOriginalPdfUrl] = useState<string | null>(null);
+  const [translatedPdfUrl, setTranslatedPdfUrl] = useState<string | null>(null);
   const [filename, setFilename] = useState<string>("");
   const [error, setError] = useState<string>("");
   const [progress, setProgress] = useState<number>(0);
@@ -33,10 +33,7 @@ export default function App() {
         const data = await res.json();
         if (typeof data.progress === "number") setProgress(data.progress);
         if (data.status === "done") {
-          // Fetch translated file as blob for in-browser rendering
-          const fileRes = await fetch(`/download/${jobId}`);
-          const blob = await fileRes.blob();
-          setTranslatedBlob(blob);
+          setTranslatedPdfUrl(`/preview/${jobId}/translated`);
           setStatus("done");
           stopPolling();
         } else if (data.status === "failed") {
@@ -56,9 +53,9 @@ export default function App() {
   }, [jobId, status]);
 
   const handleFileSelect = async (file: File) => {
-    setOriginalFile(file);
     setFilename(file.name);
-    setTranslatedBlob(null);
+    setOriginalPdfUrl(null);
+    setTranslatedPdfUrl(null);
     setStatus("uploading");
     setError("");
 
@@ -70,6 +67,7 @@ export default function App() {
       if (!res.ok) throw new Error(await res.text());
       const data = await res.json();
       setJobId(data.job_id);
+      setOriginalPdfUrl(`/preview/${data.job_id}/original`);
       setStatus("queued");
     } catch (e: unknown) {
       setStatus("failed");
@@ -78,21 +76,19 @@ export default function App() {
   };
 
   const handleDownload = () => {
-    if (!translatedBlob) return;
-    const url = URL.createObjectURL(translatedBlob);
+    if (!jobId) return;
     const a = document.createElement("a");
-    a.href = url;
+    a.href = `/download/${jobId}`;
     a.download = filename.replace(".docx", "_translated.docx");
     a.click();
-    URL.revokeObjectURL(url);
   };
 
   const handleReset = () => {
     stopPolling();
     setStatus("idle");
     setJobId(null);
-    setOriginalFile(null);
-    setTranslatedBlob(null);
+    setOriginalPdfUrl(null);
+    setTranslatedPdfUrl(null);
     setFilename("");
     setError("");
     setProgress(0);
@@ -140,13 +136,13 @@ export default function App() {
           <SplitPane
             left={
               <DocumentViewer
-                file={originalFile}
+                pdfUrl={originalPdfUrl}
                 label="Original (English)"
               />
             }
             right={
               <DocumentViewer
-                file={translatedBlob}
+                pdfUrl={translatedPdfUrl}
                 label="Translation (French)"
                 placeholder={
                   status === "failed"
