@@ -116,8 +116,9 @@ pip install fastapi "uvicorn[standard]" python-multipart docx2pdf
 Create a `.env` file in the project root:
 
 ```
-OPENAI_API_KEY=your_api_key_here
+OPENAI_API_KEY=your_key
 ```
+Note that you're responsible for obtaining an LLM API key from Netlights generator. 
 
 The engine defaults to `https://llm.netlight.ai/v1` as the API base URL. To use OpenAI directly, open `translation_engine.py` and remove the `base_url` argument from the `OpenAI(...)` client constructor.
 
