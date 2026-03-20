@@ -168,12 +168,15 @@ export default function App() {
   // ── Upload view ─────────────────────────────────────────────────────
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 to-blue-50 flex items-center justify-center p-6">
-      <div className="w-full max-w-xl bg-white rounded-3xl shadow-xl p-10 flex flex-col gap-8">
+      <div className="w-full max-w-3xl bg-white rounded-3xl shadow-xl p-10 flex flex-col gap-8">
         <div className="text-center">
           <h1 className="text-3xl font-bold text-gray-900 tracking-tight">DocTranslate</h1>
           <p className="text-gray-500 mt-1 text-sm">English → French · .docx / .pptx</p>
         </div>
-        <UploadZone onFileSelect={handleFileSelect} disabled={false} />
+        <div className="grid grid-cols-2 gap-6">
+          <UploadZone onFileSelect={handleFileSelect} disabled={false} fileType="docx" />
+          <UploadZone onFileSelect={handleFileSelect} disabled={false} fileType="pptx" />
+        </div>
       </div>
     </div>
   );
