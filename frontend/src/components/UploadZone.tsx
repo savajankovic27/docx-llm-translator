@@ -10,8 +10,8 @@ export default function UploadZone({ onFileSelect, disabled }: Props) {
   const [dragging, setDragging] = useState(false);
 
   const handleFile = (file: File) => {
-    if (!file.name.endsWith(".docx")) {
-      alert("Only .docx files are supported.");
+    if (!file.name.endsWith(".docx") && !file.name.endsWith(".pptx")) {
+      alert("Only .docx and .pptx files are supported.");
       return;
     }
     onFileSelect(file);
@@ -40,13 +40,13 @@ export default function UploadZone({ onFileSelect, disabled }: Props) {
     >
       <div className="text-5xl">📄</div>
       <p className="text-lg font-medium text-gray-700">
-        Drop your <span className="text-blue-600">.docx</span> file here
+        Drop your <span className="text-blue-600">.docx</span> or <span className="text-blue-600">.pptx</span> file here
       </p>
       <p className="text-sm text-gray-400">or click to browse</p>
       <input
         ref={inputRef}
         type="file"
-        accept=".docx"
+        accept=".docx,.pptx"
         className="hidden"
         onChange={(e) => e.target.files?.[0] && handleFile(e.target.files[0])}
       />

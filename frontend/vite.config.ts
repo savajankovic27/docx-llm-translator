@@ -9,6 +9,7 @@ export default defineConfig({
       '/translate': 'http://localhost:8000',
       '/status': 'http://localhost:8000',
       '/download': 'http://localhost:8000',
+      '/preview': 'http://localhost:8000',
     },
   },
 })
