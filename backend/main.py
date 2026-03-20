@@ -8,7 +8,7 @@ from docx2pdf import convert
 
 # Allow importing translation_engine from parent directory
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-from translation_engine import run_pipeline
+from translation_engine import run_pipeline, run_pipeline_pptx
 
 app = FastAPI()
 
@@ -34,7 +34,11 @@ def run_translation_job(job_id: str, input_path: str, output_path: str):
         def on_progress(done: int, total: int):
             jobs[job_id]["progress"] = int((done / total) * 100)
 
-        run_pipeline(input_path, output_path, progress_callback=on_progress)
+        if jobs[job_id]["filetype"] == "pptx":
+            run_pipeline_pptx(input_path, output_path, progress_callback=on_progress)
+        else:
+            run_pipeline(input_path, output_path, progress_callback=on_progress)
+
         jobs[job_id]["progress"] = 100
         jobs[job_id]["status"] = "done"
     except Exception as e:
@@ -44,17 +48,18 @@ def run_translation_job(job_id: str, input_path: str, output_path: str):
 
 @app.post("/translate")
 async def translate(file: UploadFile, background_tasks: BackgroundTasks):
-    if not file.filename or not file.filename.endswith(".docx"):
-        raise HTTPException(status_code=400, detail="Only .docx files are supported")
+    if not file.filename or not file.filename.endswith((".docx", ".pptx")):
+        raise HTTPException(status_code=400, detail="Only .docx and .pptx files are supported")
 
+    filetype = "pptx" if file.filename.endswith(".pptx") else "docx"
     job_id = str(uuid.uuid4())
-    input_path = os.path.join(UPLOAD_DIR, f"{job_id}_input.docx")
-    output_path = os.path.join(UPLOAD_DIR, f"{job_id}_output.docx")
+    input_path = os.path.join(UPLOAD_DIR, f"{job_id}_input.{filetype}")
+    output_path = os.path.join(UPLOAD_DIR, f"{job_id}_output.{filetype}")
 
     with open(input_path, "wb") as f:
         f.write(await file.read())
 
-    jobs[job_id] = {"status": "queued", "filename": file.filename}
+    jobs[job_id] = {"status": "queued", "filename": file.filename, "filetype": filetype}
     background_tasks.add_task(run_translation_job, job_id, input_path, output_path)
 
     return {"job_id": job_id}
@@ -76,12 +81,18 @@ def download(job_id: str):
     if job["status"] != "done":
         raise HTTPException(status_code=400, detail="Translation not ready")
 
-    output_path = os.path.join(UPLOAD_DIR, f"{job_id}_output.docx")
-    original_name = job.get("filename", "document.docx").replace(".docx", "")
+    filetype = job.get("filetype", "docx")
+    ext = f".{filetype}"
+    media_types = {
+        "docx": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        "pptx": "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+    }
+    output_path = os.path.join(UPLOAD_DIR, f"{job_id}_output{ext}")
+    original_name = job.get("filename", f"document{ext}").replace(ext, "")
     return FileResponse(
         output_path,
-        media_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-        filename=f"{original_name}_translated.docx",
+        media_type=media_types[filetype],
+        filename=f"{original_name}_translated{ext}",
     )
 
 
@@ -94,6 +105,8 @@ def preview_pdf(job_id: str, doc_type: str):
         raise HTTPException(status_code=400, detail="doc_type must be 'original' or 'translated'")
     if doc_type == "translated" and job["status"] != "done":
         raise HTTPException(status_code=400, detail="Translation not ready")
+    if job.get("filetype") == "pptx":
+        raise HTTPException(status_code=501, detail="PDF preview not available for .pptx files")
 
     docx_path = os.path.join(UPLOAD_DIR, f"{job_id}_{'input' if doc_type == 'original' else 'output'}.docx")
     pdf_path = os.path.join(UPLOAD_DIR, f"{job_id}_{doc_type}.pdf")

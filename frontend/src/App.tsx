@@ -33,7 +33,9 @@ export default function App() {
         const data = await res.json();
         if (typeof data.progress === "number") setProgress(data.progress);
         if (data.status === "done") {
-          setTranslatedPdfUrl(`/preview/${jobId}/translated`);
+          if (!filename.endsWith(".pptx")) {
+            setTranslatedPdfUrl(`/preview/${jobId}/translated`);
+          }
           setStatus("done");
           stopPolling();
         } else if (data.status === "failed") {
@@ -67,7 +69,9 @@ export default function App() {
       if (!res.ok) throw new Error(await res.text());
       const data = await res.json();
       setJobId(data.job_id);
-      setOriginalPdfUrl(`/preview/${data.job_id}/original`);
+      if (!file.name.endsWith(".pptx")) {
+        setOriginalPdfUrl(`/preview/${data.job_id}/original`);
+      }
       setStatus("queued");
     } catch (e: unknown) {
       setStatus("failed");
@@ -77,9 +81,10 @@ export default function App() {
 
   const handleDownload = () => {
     if (!jobId) return;
+    const ext = filename.endsWith(".pptx") ? ".pptx" : ".docx";
     const a = document.createElement("a");
     a.href = `/download/${jobId}`;
-    a.download = filename.replace(".docx", "_translated.docx");
+    a.download = filename.replace(ext, `_translated${ext}`);
     a.click();
   };
 
@@ -138,6 +143,7 @@ export default function App() {
               <DocumentViewer
                 pdfUrl={originalPdfUrl}
                 label="Original (English)"
+                placeholder={filename.endsWith(".pptx") ? "PDF preview unavailable for .pptx — download to view" : undefined}
               />
             }
             right={
@@ -147,6 +153,8 @@ export default function App() {
                 placeholder={
                   status === "failed"
                     ? (error || "Translation failed.")
+                    : filename.endsWith(".pptx")
+                    ? "PDF preview unavailable for .pptx — download when ready"
                     : "Translation in progress…"
                 }
               />
@@ -163,7 +171,7 @@ export default function App() {
       <div className="w-full max-w-xl bg-white rounded-3xl shadow-xl p-10 flex flex-col gap-8">
         <div className="text-center">
           <h1 className="text-3xl font-bold text-gray-900 tracking-tight">DocTranslate</h1>
-          <p className="text-gray-500 mt-1 text-sm">English → French · .docx</p>
+          <p className="text-gray-500 mt-1 text-sm">English → French · .docx / .pptx</p>
         </div>
         <UploadZone onFileSelect={handleFileSelect} disabled={false} />
       </div>
