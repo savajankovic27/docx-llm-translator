@@ -3,7 +3,7 @@ import { useRef, useState } from "react";
 interface Props {
   onFileSelect: (file: File) => void;
   disabled: boolean;
-  fileType: "docx" | "pptx";
+  fileType: "docx" | "pptx" | "pdf";
 }
 
 const CONFIG = {
@@ -18,6 +18,12 @@ const CONFIG = {
     icon: "📊",
     label: "PowerPoint Presentation",
     ext: ".pptx",
+  },
+  pdf: {
+    accept: ".pdf",
+    icon: "📕",
+    label: "PDF Document",
+    ext: ".pdf",
   },
 };
 

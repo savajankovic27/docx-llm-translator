@@ -245,7 +245,32 @@ def run_pipeline(input_docx, output_docx, progress_callback=None):
     shutil.rmtree(temp_dir)
     print(f"Success! Output: {output_docx}")
 
-# 5. PPTX SUPPORT
+# 5. PDF SUPPORT
+def run_pipeline_pdf(input_pdf, output_pdf, progress_callback=None):
+    temp_dir = tempfile.mkdtemp()
+    try:
+        temp_docx = os.path.join(temp_dir, "converted.docx")
+        temp_translated_docx = os.path.join(temp_dir, "translated.docx")
+
+        # Step 1: PDF → DOCX
+        from pdf2docx import Converter
+        cv = Converter(input_pdf)
+        cv.convert(temp_docx)
+        cv.close()
+
+        # Step 2: Translate DOCX using existing pipeline
+        run_pipeline(temp_docx, temp_translated_docx, progress_callback=progress_callback)
+
+        # Step 3: Translated DOCX → PDF
+        from docx2pdf import convert
+        convert(temp_translated_docx, output_pdf)
+
+        print(f"Success! Output: {output_pdf}")
+    finally:
+        shutil.rmtree(temp_dir)
+
+
+# 6. PPTX SUPPORT
 A_NS = "http://schemas.openxmlformats.org/drawingml/2006/main"
 A_NAMESPACE = {"a": A_NS}
 PPTX_EXCLUDED_DIRS = {"slideLayouts", "slideMasters", "theme", "notesSlides", "notesMasters"}
