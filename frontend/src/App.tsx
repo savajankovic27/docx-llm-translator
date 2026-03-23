@@ -81,7 +81,7 @@ export default function App() {
 
   const handleDownload = () => {
     if (!jobId) return;
-    const ext = filename.endsWith(".pptx") ? ".pptx" : ".docx";
+    const ext = filename.endsWith(".pptx") ? ".pptx" : filename.endsWith(".pdf") ? ".pdf" : ".docx";
     const a = document.createElement("a");
     a.href = `/download/${jobId}`;
     a.download = filename.replace(ext, `_translated${ext}`);
@@ -143,7 +143,7 @@ export default function App() {
               <DocumentViewer
                 pdfUrl={originalPdfUrl}
                 label="Original (English)"
-                placeholder={filename.endsWith(".pptx") ? "PDF preview unavailable for .pptx — download to view" : undefined}
+                placeholder={filename.endsWith(".pptx") ? "PDF preview unavailable for .pptx — download to view" : "No document loaded"}
               />
             }
             right={
@@ -154,7 +154,7 @@ export default function App() {
                   status === "failed"
                     ? (error || "Translation failed.")
                     : filename.endsWith(".pptx")
-                    ? "PDF preview unavailable for .pptx — download when ready"
+                    ? "Translation done — download to view"
                     : "Translation in progress…"
                 }
               />
@@ -168,12 +168,16 @@ export default function App() {
   // ── Upload view ─────────────────────────────────────────────────────
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 to-blue-50 flex items-center justify-center p-6">
-      <div className="w-full max-w-xl bg-white rounded-3xl shadow-xl p-10 flex flex-col gap-8">
+      <div className="w-full max-w-4xl bg-white rounded-3xl shadow-xl p-10 flex flex-col gap-8">
         <div className="text-center">
           <h1 className="text-3xl font-bold text-gray-900 tracking-tight">DocTranslate</h1>
-          <p className="text-gray-500 mt-1 text-sm">English → French · .docx / .pptx</p>
+          <p className="text-gray-500 mt-1 text-sm">English → French · .docx / .pptx / .pdf</p>
         </div>
-        <UploadZone onFileSelect={handleFileSelect} disabled={false} />
+        <div className="grid grid-cols-3 gap-6">
+          <UploadZone onFileSelect={handleFileSelect} disabled={false} fileType="docx" />
+          <UploadZone onFileSelect={handleFileSelect} disabled={false} fileType="pptx" />
+          <UploadZone onFileSelect={handleFileSelect} disabled={false} fileType="pdf" />
+        </div>
       </div>
     </div>
   );

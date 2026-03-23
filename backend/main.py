@@ -8,7 +8,7 @@ from docx2pdf import convert
 
 # Allow importing translation_engine from parent directory
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-from translation_engine import run_pipeline, run_pipeline_pptx
+from translation_engine import run_pipeline, run_pipeline_pptx, run_pipeline_pdf
 
 app = FastAPI()
 
@@ -34,8 +34,11 @@ def run_translation_job(job_id: str, input_path: str, output_path: str):
         def on_progress(done: int, total: int):
             jobs[job_id]["progress"] = int((done / total) * 100)
 
-        if jobs[job_id]["filetype"] == "pptx":
+        filetype = jobs[job_id]["filetype"]
+        if filetype == "pptx":
             run_pipeline_pptx(input_path, output_path, progress_callback=on_progress)
+        elif filetype == "pdf":
+            run_pipeline_pdf(input_path, output_path, progress_callback=on_progress)
         else:
             run_pipeline(input_path, output_path, progress_callback=on_progress)
 
@@ -48,10 +51,15 @@ def run_translation_job(job_id: str, input_path: str, output_path: str):
 
 @app.post("/translate")
 async def translate(file: UploadFile, background_tasks: BackgroundTasks):
-    if not file.filename or not file.filename.endswith((".docx", ".pptx")):
-        raise HTTPException(status_code=400, detail="Only .docx and .pptx files are supported")
+    if not file.filename or not file.filename.endswith((".docx", ".pptx", ".pdf")):
+        raise HTTPException(status_code=400, detail="Only .docx, .pptx, and .pdf files are supported")
 
-    filetype = "pptx" if file.filename.endswith(".pptx") else "docx"
+    if file.filename.endswith(".pptx"):
+        filetype = "pptx"
+    elif file.filename.endswith(".pdf"):
+        filetype = "pdf"
+    else:
+        filetype = "docx"
     job_id = str(uuid.uuid4())
     input_path = os.path.join(UPLOAD_DIR, f"{job_id}_input.{filetype}")
     output_path = os.path.join(UPLOAD_DIR, f"{job_id}_output.{filetype}")
@@ -86,6 +94,7 @@ def download(job_id: str):
     media_types = {
         "docx": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
         "pptx": "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+        "pdf": "application/pdf",
     }
     output_path = os.path.join(UPLOAD_DIR, f"{job_id}_output{ext}")
     original_name = job.get("filename", f"document{ext}").replace(ext, "")
@@ -105,9 +114,18 @@ def preview_pdf(job_id: str, doc_type: str):
         raise HTTPException(status_code=400, detail="doc_type must be 'original' or 'translated'")
     if doc_type == "translated" and job["status"] != "done":
         raise HTTPException(status_code=400, detail="Translation not ready")
-    if job.get("filetype") == "pptx":
+    filetype = job.get("filetype", "docx")
+
+    if filetype == "pptx":
         raise HTTPException(status_code=501, detail="PDF preview not available for .pptx files")
 
+    if filetype == "pdf":
+        # Input and output are already PDFs — serve directly
+        suffix = "input" if doc_type == "original" else "output"
+        pdf_path = os.path.join(UPLOAD_DIR, f"{job_id}_{suffix}.pdf")
+        return FileResponse(pdf_path, media_type="application/pdf")
+
+    # DOCX — convert to PDF on demand
     docx_path = os.path.join(UPLOAD_DIR, f"{job_id}_{'input' if doc_type == 'original' else 'output'}.docx")
     pdf_path = os.path.join(UPLOAD_DIR, f"{job_id}_{doc_type}.pdf")
 

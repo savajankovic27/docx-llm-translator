@@ -33,7 +33,6 @@ def get_rds_terms():
         if 'conn' in locals():
             conn.close()
 
-
 def log_token_usage(token_count):
     """
     Logs LLM token usage to RDS for cost tracking.
